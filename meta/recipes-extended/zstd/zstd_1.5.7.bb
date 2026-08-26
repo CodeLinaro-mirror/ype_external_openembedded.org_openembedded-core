@@ -12,7 +12,9 @@ LIC_FILES_CHKSUM = "file://LICENSE;md5=0822a32f7acdbe013606746641746ee8 \
                     file://COPYING;md5=39bba7d2cf0ba1036f2a6e2be52fe3f0 \
                     "
 
-SRC_URI = "git://github.com/facebook/zstd.git;branch=release;protocol=https;tag=v${PV}"
+SRC_URI = "git://github.com/facebook/zstd.git;branch=release;protocol=https;tag=v${PV} \
+           file://run-ptest \
+           "
 
 SRCREV = "f8745da6ff1ad1e7bab384bd1f9d742439278e99"
 UPSTREAM_CHECK_GITTAGREGEX = "v(?P<pver>\d+(\.\d+)+)"
@@ -44,3 +46,40 @@ PACKAGE_BEFORE_PN = "libzstd"
 FILES:libzstd = "${libdir}/libzstd${SOLIBS}"
 
 BBCLASSEXTEND = "native nativesdk"
+
+inherit ptest
+
+do_compile_ptest() {
+    oe_runmake -C ${S}/tests fullbench datagen \
+        ZSTD_LEGACY_SUPPORT=${ZSTD_LEGACY_SUPPORT}
+}
+
+do_install_ptest() {
+    install -d ${D}${PTEST_PATH}/tests
+
+    # Test binaries
+    install -m 0755 ${S}/tests/fullbench ${D}${PTEST_PATH}/tests/
+    install -m 0755 ${S}/tests/datagen ${D}${PTEST_PATH}/tests/
+
+    # cli-tests
+    cp -r ${S}/tests/cli-tests ${D}${PTEST_PATH}/tests/
+
+    # Golden test data needed by cli-tests
+    for d in golden-compression golden-decompression golden-dictionaries; do
+        cp -r ${S}/tests/$d ${D}${PTEST_PATH}/tests/
+    done
+
+    # Remove tests incompatible with ptest environment:
+    # levels.sh: --ultra/--max levels require >8GB RAM
+    rm -f ${D}${PTEST_PATH}/tests/cli-tests/compression/levels.sh
+    # window-resize.sh: 1GB window size requires >4GB RAM
+    rm -f ${D}${PTEST_PATH}/tests/cli-tests/compression/window-resize.sh
+    # compress-file-to-dir-without-write-perm.sh: ptest runs as root,
+    # which bypasses filesystem permission checks
+    rm -f ${D}${PTEST_PATH}/tests/cli-tests/file-stat/compress-file-to-dir-without-write-perm.sh
+    # cltools/: zstdgrep requires GNU grep --label option not available
+    # in BusyBox grep
+    rm -rf ${D}${PTEST_PATH}/tests/cli-tests/cltools
+}
+
+RDEPENDS:${PN}-ptest += "bash python3-core python3-modules"

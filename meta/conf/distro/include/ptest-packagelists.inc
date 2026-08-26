@@ -105,6 +105,7 @@ PTESTS_FAST = "\
     wayland \
     xz \
     zlib \
+    zstd \
 "
 PTESTS_FAST:remove:mips64 = "qemu"
 PTESTS_PROBLEMS:append:mips64 = " qemu"
